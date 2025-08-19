@@ -105,10 +105,12 @@ func handleUpload() {
 			}
 		})
 	} else {
-		// Upload single file
-		uploadErr = c.UploadFolder(filepath.Dir(localPath), filepath.Dir(remotePath), func(progress *client.TransferProgress) {
-			fmt.Printf("\rUploading... %d bytes processed", progress.ProcessedSize)
-		})
+		// Upload single file - use the client's UploadFile method directly
+		if err := c.UploadFile(localPath, remotePath); err != nil {
+			uploadErr = fmt.Errorf("failed to upload file: %w", err)
+		} else {
+			fmt.Printf("\rFile uploaded successfully")
+		}
 	}
 
 	if uploadErr != nil {
@@ -163,23 +165,47 @@ func handleDownload() {
 
 	fmt.Printf("Downloading %s to %s...\n", remotePath, localPath)
 
-	// Try to download as folder first, then as file
-	downloadErr := c.DownloadFolder(remotePath, localPath, func(progress *client.TransferProgress) {
-		if *verbose {
-			fmt.Printf("Progress: %d files, current: %s\n", progress.ProcessedFiles, progress.CurrentFile)
-		} else {
-			fmt.Printf("\rProgress: %d files processed", progress.ProcessedFiles)
+	// First, check if remote path is a file or directory by listing its parent
+	parentPath := filepath.Dir(remotePath)
+	fileName := filepath.Base(remotePath)
+	
+	files, err := c.ListFiles(parentPath)
+	if err != nil {
+		// If we can't list the parent, try direct download as file
+		downloadErr := c.DownloadFile(remotePath, localPath)
+		if downloadErr != nil {
+			fmt.Fprintf(os.Stderr, "\nDownload failed: %v\n", downloadErr)
+			os.Exit(1)
 		}
-	})
-
-	if downloadErr != nil {
-		// Try as single file
-		downloadErr = c.DownloadFile(remotePath, localPath)
-	}
-
-	if downloadErr != nil {
-		fmt.Fprintf(os.Stderr, "\nDownload failed: %v\n", downloadErr)
-		os.Exit(1)
+	} else {
+		// Check if the target is a file or directory
+		var isDirectory bool
+		for _, file := range files {
+			if file.Name == fileName {
+				isDirectory = file.IsDir
+				break
+			}
+		}
+		
+		var downloadErr error
+		if isDirectory {
+			// Download as folder
+			downloadErr = c.DownloadFolder(remotePath, localPath, func(progress *client.TransferProgress) {
+				if *verbose {
+					fmt.Printf("Progress: %d files, current: %s\n", progress.ProcessedFiles, progress.CurrentFile)
+				} else {
+					fmt.Printf("\rProgress: %d files processed", progress.ProcessedFiles)
+				}
+			})
+		} else {
+			// Download as file
+			downloadErr = c.DownloadFile(remotePath, localPath)
+		}
+		
+		if downloadErr != nil {
+			fmt.Fprintf(os.Stderr, "\nDownload failed: %v\n", downloadErr)
+			os.Exit(1)
+		}
 	}
 
 	fmt.Printf("\nDownload completed successfully!\n")

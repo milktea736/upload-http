@@ -50,4 +50,7 @@ Thumbs.db
 # Temporary files
 /tmp/
 *.tmp
-*.bak
+*.baktest-data/
+test-data/
+uploads/
+downloaded*

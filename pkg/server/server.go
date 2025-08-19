@@ -161,6 +161,8 @@ func (s *Server) processUpload(transferID string, form *multipart.Form) {
 	}()
 	
 	files := form.File["files"]
+	remotePaths := form.Value["remote_path"]
+	
 	status.TotalFiles = len(files)
 	
 	// Calculate total size
@@ -169,8 +171,16 @@ func (s *Server) processUpload(transferID string, form *multipart.Form) {
 	}
 	
 	for i, fileHeader := range files {
-		if err := s.processUploadedFile(fileHeader, status); err != nil {
-			s.logger.Error("Failed to process file %s: %v", fileHeader.Filename, err)
+		// Get the corresponding remote path
+		var remotePath string
+		if i < len(remotePaths) {
+			remotePath = remotePaths[i]
+		} else {
+			remotePath = fileHeader.Filename // fallback to filename
+		}
+		
+		if err := s.processUploadedFile(fileHeader, remotePath, status); err != nil {
+			s.logger.Error("Failed to process file %s: %v", remotePath, err)
 			status.Status = "failed"
 			status.Error = err.Error()
 			return
@@ -185,16 +195,24 @@ func (s *Server) processUpload(transferID string, form *multipart.Form) {
 }
 
 // processUploadedFile processes a single uploaded file
-func (s *Server) processUploadedFile(fileHeader *multipart.FileHeader, status *TransferStatus) error {
+func (s *Server) processUploadedFile(fileHeader *multipart.FileHeader, remotePath string, status *TransferStatus) error {
 	file, err := fileHeader.Open()
 	if err != nil {
 		return fmt.Errorf("failed to open uploaded file: %w", err)
 	}
 	defer file.Close()
 	
-	// Create destination path
-	destPath := filepath.Join(s.config.StoragePath, fileHeader.Filename)
+	s.logger.Debug("Processing uploaded file: filename='%s', remotePath='%s'", fileHeader.Filename, remotePath)
+	
+	// Create destination path using the remotePath instead of fileHeader.Filename
+	destPath := filepath.Join(s.config.StoragePath, remotePath)
 	destDir := filepath.Dir(destPath)
+	
+	s.logger.Debug("Destination path: '%s', directory: '%s'", destPath, destDir)
+	
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
 	
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)

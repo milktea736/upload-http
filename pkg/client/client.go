@@ -107,7 +107,7 @@ func (c *Client) UploadFolder(localPath, remotePath string, progressCallback Pro
 			// Adjust remote path
 			fullRemotePath := filepath.Join(remotePath, relPath)
 			
-			if err := c.uploadFile(fp, fullRemotePath); err != nil {
+			if err := c.UploadFile(fp, fullRemotePath); err != nil {
 				mu.Lock()
 				if uploadErr == nil {
 					uploadErr = fmt.Errorf("failed to upload %s: %w", fp, err)
@@ -145,20 +145,31 @@ func (c *Client) UploadFolder(localPath, remotePath string, progressCallback Pro
 	return nil
 }
 
-// uploadFile uploads a single file
-func (c *Client) uploadFile(localPath, remotePath string) error {
+// UploadFile uploads a single file
+func (c *Client) UploadFile(localPath, remotePath string) error {
 	file, err := os.Open(localPath)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
 	defer file.Close()
 	
+	c.logger.Debug("Uploading file: local='%s', remote='%s'", localPath, remotePath)
+	
 	// Create multipart form
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	
-	// Add file to form
-	part, err := writer.CreateFormFile("files", remotePath)
+	// Add the remote path as a separate field
+	pathField, err := writer.CreateFormField("remote_path")
+	if err != nil {
+		return fmt.Errorf("failed to create remote path field: %w", err)
+	}
+	if _, err := pathField.Write([]byte(remotePath)); err != nil {
+		return fmt.Errorf("failed to write remote path: %w", err)
+	}
+	
+	// Add file to form (use just the base filename for the multipart filename)
+	part, err := writer.CreateFormFile("files", filepath.Base(remotePath))
 	if err != nil {
 		return fmt.Errorf("failed to create form file: %w", err)
 	}
