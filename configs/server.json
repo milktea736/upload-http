@@ -1,0 +1,10 @@
+{
+  "port": 8080,
+  "host": "0.0.0.0",
+  "storage_path": "./uploads",
+  "max_file_size": 104857600,
+  "log_level": "info",
+  "enable_https": false,
+  "cert_file": "",
+  "key_file": ""
+}

@@ -1,0 +1,6 @@
+{
+  "server_url": "http://localhost:8080",
+  "timeout": 300,
+  "concurrency": 4,
+  "log_level": "info"
+}
